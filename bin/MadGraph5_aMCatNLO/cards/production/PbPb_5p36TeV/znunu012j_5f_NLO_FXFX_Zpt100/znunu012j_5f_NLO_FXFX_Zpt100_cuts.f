@@ -1,4 +1,4 @@
-c
+c *This file contains cuts on the pt of nunu : line406-
 c This file contains the default cuts (as defined in the run_card.dat)
 c and can easily be extended by the user to include other.  This
 c function should return true if event passes cuts
@@ -36,8 +36,8 @@ c difficulty in using this.
 c
 C     external functions that can be used. Some are defined in this
 C     file, others are in ./Source/kin_functions.f
-      REAL*8 R2_04,invm2_04,ptZ,pt_04,eta_04,pt,eta
-      external R2_04,invm2_04,ptZ,pt_04,eta_04,pt,eta
+      REAL*8 R2_04,invm2_04,pt_04,eta_04,pt,eta
+      external R2_04,invm2_04,pt_04,eta_04,pt,eta
 c local integers
       integer i,j
 c temporary variable for caching locally computation
@@ -64,6 +64,11 @@ c The UNLOPS cut
       double precision p_unlops(0:3,nexternal)
       include "run.inc" ! includes the ickkw parameter
       logical passUNLOPScuts
+c PDG specific cut
+      double precision etmin(nincoming+1:nexternal-1)
+      double precision etmax(nincoming+1:nexternal-1)
+      double precision mxxmin(nincoming+1:nexternal-1,nincoming+1:nexternal-1)
+      common /to_cuts/etmin,etmax,mxxmin
 c logicals that define if particles are leptons, jets or photons. These
 c are filled from the PDG codes (iPDG array) in this function.
       logical is_a_lp(nexternal),is_a_lm(nexternal),is_a_j(nexternal)
@@ -76,21 +81,6 @@ C***************************************************************
 C Cuts from the run_card.dat
 C***************************************************************
 C***************************************************************
-c
-c Z PT CUTS
-c
-      do i=0,nexternal
-         do j=i+1,nexternal
-            if ((abs(ipdg(i)).eq.12.or.abs(ipdg(i)).eq.14.or.
-     &        abs(ipdg(i)).eq.16).and.(ipdg(i).eq.-ipdg(j))) then
-              if (ptZ(p(0,i),p(0,j)).lt.100) then
-                  passcuts_user=.false.
-                  return
-              endif
-            endif
-         enddo
-      enddo
-      
 c
 c CHARGED LEPTON CUTS
 c
@@ -389,6 +379,47 @@ c End of loop over photons
 c End photon isolation
       endif
 
+C
+C     PDG SPECIFIC CUTS (PT/M_IJ)
+C
+      do i=nincoming+1,nexternal-1
+         if(etmin(i).gt.0d0 .or. etmax(i).gt.0d0)then
+            tmpvar = pt_04(p(0,i))
+            if (tmpvar.lt.etmin(i)) then
+               passcuts_user=.false.
+               return
+            elseif (tmpvar.gt.etmax(i) .and. etmax(i).gt.0d0) then
+               passcuts_user=.false.
+               return
+            endif
+         endif
+         do j=i+1, nexternal-1
+            if (mxxmin(i,j).gt.0d0)then
+               if (invm2_04(p(0,i),p(0,j),1d0).lt.mxxmin(i,j)**2)then
+                  passcuts_user=.false.
+                  return
+               endif
+            endif
+         enddo
+      enddo
+
+
+      do i=1,nexternal
+         do j=i+1,nexternal
+            if (ipdg(i).eq.-ipdg(j)) then
+               if (abs(ipdg(i)).eq.12.or.abs(ipdg(i)).eq.14.or.
+     $            abs(ipdg(i)).eq.16) then
+                  tmpvar = (p(1,i)+p(1,j))**2+(p(2,i)+p(2,j))**2
+                  if (tmpvar.lt.70**2) then
+                     passcuts_user=.false.
+                     return
+                  endif
+               endif
+            endif
+         enddo
+      enddo
+
+
 C***************************************************************
 C***************************************************************
 C PUT HERE YOUR USER-DEFINED CUTS
@@ -396,6 +427,7 @@ C***************************************************************
 C***************************************************************
 C
 c$$$C EXAMPLE: cut on top quark pT
+c$$$C          Note that PDG specific cut are more optimised than simple user cut
 c$$$      do i=1,nexternal   ! loop over all external particles
 c$$$         if (istatus(i).eq.1    ! final state particle
 c$$$     &        .and. abs(ipdg(i)).eq.6) then    ! top quark
@@ -792,24 +824,6 @@ c-----
       R2_04 = (DELTA_PHI(P1a,P2a))**2+(eta(p1a)-eta(p2a))**2
       RETURN
       END
-
-      double precision function ptZ(P1,P2)
-c************************************************************************
-c     Returns transverse momentum of Z particle
-c************************************************************************
-      IMPLICIT NONE
-c
-c     Arguments
-c
-      double precision P1(0:4),P2(0:4)
-c-----
-c  Begin Code
-c-----
-
-      ptZ = dsqrt((P1(1)+P2(1))**2+(P1(2)+P2(2))**2)
-
-      return
-      end
 
       double precision function pt_04(p)
 c************************************************************************
